@@ -3,23 +3,23 @@
 
 [segment .text]
 
-	mov ah, 9
-	mov dx, hello
-	int 21h
+main:
+	mov dx, str_hello			; pointer to string
+	call print					; call print function
+	mov dx, str_goodbye			; pointer to string
+	call print					; call print function
 	jmp exit
-	mov ah, 9
-	mov dx, nope
-	int 21h
 
 exit:
-	mov ah, 9
-	mov dx, end
-	int 21h
-	mov ah, 76
-	int 21h
+	mov ah, 4ch					; exit
+	int 21h						; call dos
+
+print:
+	mov ah, 9h					; print
+	int 21h						; call dos
+	ret							; return to caller
 
 [segment .data]
 
-hello: db 'hello, world',13,10,'$'
-end: db 'reached exit',13,10,'$'
-nope: db 'didnt reach exit',13,10,'$'
+str_hello: db 'hello, world',13,10,'$'
+str_goodbye: db 'goodbye, world',13,10,'$'

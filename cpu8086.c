@@ -47,6 +47,7 @@ typedef void (*cpu_interupt_t)(void);
 // limits
 #define MEMORY 0x10000
 #define PROGRAM 0x0100
+#define STACK 0x2000
 #define NUM_OPS 256
 #define NUM_REGS 28
 #define NUM_INTERRUPTS 256
@@ -75,6 +76,15 @@ typedef void (*cpu_interupt_t)(void);
 #define REG_DX REG16(6)
 #define REG_DH REG8(6)
 #define REG_DL REG8(7)
+#define REG_SI REG16(8)
+#define REG_DI REG16(10)
+#define REG_BP REG16(12)
+#define REG_SP REG16(14)
+#define REG_IP REG16(16)
+#define REG_CS REG16(18)
+#define REG_DS REG16(20)
+#define REG_ES REG16(22)
+#define REG_SS REG16(24)
 
 // helpers
 #define OP(name) uint8_t *op_##name(uint8_t *p)
@@ -99,17 +109,23 @@ void *load(char *filename, size_t *len);
 // memory buffer
 uint8_t cpu_memory[MEMORY];
 uint8_t *cpu_program = &cpu_memory[PROGRAM];
+uint8_t *cpu_stack = &cpu_memory[MEMORY - 1];
 uint8_t cpu_regs[NUM_REGS];
 size_t cpu_program_len;
 bool cpu_quit = false;
-interrupt_t cpu_int;
+interrupt_t cpu_int_vec;
+uint8_t *cpu_ip;
 
 // tables
 cpu_interupt_t cpu_interrupts[NUM_VECTORS][NUM_INTERRUPTS];
 cpu_opcode_t cpu_opcodes[NUM_OPS];
 
+// push, pop helpers
+static inline void cpu_push(uint16_t x) { REG_SP -= 2; *(cpu_stack - REG_SP) = x; }
+static inline void cpu_pop(uint16_t *x) { *x = *(cpu_stack - REG_SP); REG_SP += 2; }
+
 // interrupt functions
-INT(err) { error("invalid interrupt 0x%x with ah: 0x%x\n", cpu_int, REG_AH); }
+INT(err) { error("invalid interrupt 0x%02x with ah: 0x%02x\n", cpu_int_vec, REG_AH); }
 INT(20h) { cpu_quit = true; }
 INT(21h_001) { REG_AL = (char)getc(stdin); }
 INT(21h_002) { REG_AL = (char)getc(stdout); putc((char)REG_DL, stdout); }
@@ -121,12 +137,14 @@ INT(21h_009) { print((char *)&cpu_memory[REG_DX], '$', stdout); }
 INT(21h_076) { cpu_quit = true; }
 
 // opcode functions
-OP(err) /* err    */ { error("invalid opcode 0x%x, 0x%x at offset 0x%x", *(p - 1), *p, (p - 1) - cpu_program); return p; }
+OP(err) /* err    */ { error("invalid opcode 0x%02x, 0x%02x at offset 0x%02x", *(p - 1), *p, (p - 1) - cpu_program); return p; }
+OP(090) /* nop    */ { return p; }
 OP(180) /* mov ah */ { REG_AH = *p; return p + 1; }
 OP(186) /* mov dx */ { REG_DX = *(uint16_t *)p; return p + 2; }
-OP(205) /* int    */ { cpu_int = *p - VECTOR_OFS; cpu_interrupts[cpu_int][REG_AH](); return p + 1; }
-OP(235) /* jmp    */ { return p + *p + 1; }
-OP(090) /* nop    */ { return p; }
+OP(195) /* ret    */ { UNUSED(p); return cpu_ip; }
+OP(205) /* int    */ { cpu_int_vec = *p - VECTOR_OFS; cpu_interrupts[cpu_int_vec][REG_AH](); return p + 1; }
+OP(232) /* call   */ { cpu_ip = p + 2; return p + *(int8_t *)p + 2; }
+OP(235) /* jmp    */ { return p + *(int8_t *)p + 1; }
 
 //
 //
@@ -158,10 +176,15 @@ void cpu_init(void)
 		if (i == 90) cpu_opcodes[i] = &op_090;
 		else if (i == 180) cpu_opcodes[i] = &op_180;
 		else if (i == 186) cpu_opcodes[i] = &op_186;
+		else if (i == 195) cpu_opcodes[i] = &op_195;
 		else if (i == 205) cpu_opcodes[i] = &op_205;
+		else if (i == 232) cpu_opcodes[i] = &op_232;
 		else if (i == 235) cpu_opcodes[i] = &op_235;
 		else cpu_opcodes[i] = &op_err;
 	}
+
+	// set stack pointer
+	REG_SP = 0;
 }
 
 //
