@@ -97,6 +97,7 @@ typedef void (*cpu_interupt_t)(void);
 //
 
 int error(const char *s, ...);
+void message(const char *s, ...);
 void print(char *string, char terminator, FILE *stream);
 void *load(char *filename, size_t *len);
 
@@ -115,6 +116,7 @@ size_t cpu_program_len;
 bool cpu_quit = false;
 interrupt_t cpu_int_vec;
 uint8_t *cpu_ip;
+char cpu_program_name[256];
 
 // tables
 cpu_interupt_t cpu_interrupts[NUM_VECTORS][NUM_INTERRUPTS];
@@ -126,8 +128,8 @@ static inline void cpu_pop(uint16_t *x) { *x = *(cpu_stack - REG_SP); REG_SP -= 
 
 // interrupt functions
 INT(err) { error("invalid interrupt 0x%02x with ah: 0x%02x\n", cpu_int_vec, REG_AH); }
-INT(20h) { cpu_quit = true; }
-INT(21h_000) { cpu_quit = true; }
+INT(20h) { message("%s exited", cpu_program_name); cpu_quit = true; }
+INT(21h_000) { message("%s exited", cpu_program_name); cpu_quit = true; }
 INT(21h_001) { REG_AL = (char)getc(stdin); }
 INT(21h_002) { REG_AL = (char)getc(stdout); putc((char)REG_DL, stdout); }
 INT(21h_005) { putc((char)REG_DL, stdout); }
@@ -135,7 +137,7 @@ INT(21h_006) { putc((char)REG_DL, stdout); REG_AL = (char)getc(stdout); }
 INT(21h_007) { REG_AL = (char)getc(stdin); }
 INT(21h_008) { REG_AL = (char)getc(stdin); }
 INT(21h_009) { print((char *)&cpu_memory[REG_DX], '$', stdout); }
-INT(21h_076) { cpu_quit = true; }
+INT(21h_076) { message("%s exited with return code %u", cpu_program_name, REG_AL); cpu_quit = true; }
 
 // opcode functions
 OP(err) /* err    */ { error("invalid opcode 0x%02x, 0x%02x at offset 0x%02x", *(p - 1), *p, (p - 1) - cpu_program); return p; }
@@ -260,6 +262,21 @@ void print(char *string, char terminator, FILE *stream)
 }
 
 //
+// message
+//
+
+void message(const char *s, ...)
+{
+	va_list ap;
+
+	va_start(ap, s);
+	fprintf(stdout, "> cpu8086: ");
+	vfprintf(stdout, s, ap);
+	fprintf(stdout, "\n");
+	va_end(ap);
+}
+
+//
 // error
 //
 
@@ -268,7 +285,7 @@ int error(const char *s, ...)
 	va_list ap;
 
 	va_start(ap, s);
-	fprintf(stderr, "cpu8086 error: ");
+	fprintf(stderr, "> cpu8086 error: ");
 	vfprintf(stderr, s, ap);
 	fprintf(stderr, "\n");
 	va_end(ap);
@@ -291,12 +308,20 @@ int main(int argc, char *argv[])
 	// check validitiy
 	if (argc < 2) return error("must provide input file");
 
-	// load program
-	program = load(argv[1], &len);
-	if (program == NULL) return error("failed to load %s", argv[1]);
+	// copy name
+	strcpy(cpu_program_name, argv[1]);
 
-	// init and run cpu
+	// load program
+	message("loadng %s", cpu_program_name);
+	program = load(cpu_program_name, &len);
+	if (program == NULL) return error("failed to load %s", cpu_program_name);
+
+	// init cpu
+	message("placing %s at address 0x%04x", cpu_program_name, PROGRAM);
 	cpu_init();
+
+	// run cpu
+	message("executing %s", cpu_program_name);
 	cpu_run(program, len);
 
 	// free program
