@@ -52,7 +52,7 @@ typedef void (*cpu_interupt_t)(void);
 #define NUM_REGS 28
 #define NUM_INTERRUPTS 256
 #define NUM_VECTORS 16
-#define VECTOR_OFS 32
+#define VECTOR_BASE 0x20
 
 // utils
 #define UNUSED(x) ((void)(x))
@@ -144,7 +144,7 @@ OP(090) /* nop    */ { return p; }
 OP(180) /* mov ah */ { REG_AH = *p; return p + 1; }
 OP(186) /* mov dx */ { REG_DX = *(uint16_t *)p; return p + 2; }
 OP(195) /* ret    */ { UNUSED(p); uint16_t ip; cpu_pop(&ip); return cpu_program + ip; }
-OP(205) /* int    */ { cpu_int_vec = *p - VECTOR_OFS; cpu_interrupts[cpu_int_vec][REG_AH](); return p + 1; }
+OP(205) /* int    */ { cpu_int_vec = *p - VECTOR_BASE; cpu_interrupts[cpu_int_vec][REG_AH](); return p + 1; }
 OP(232) /* call   */ { cpu_push((p + 2) - cpu_program); return p + *(int8_t *)p + 2; }
 OP(235) /* jmp    */ { return p + *(int8_t *)p + 1; }
 
