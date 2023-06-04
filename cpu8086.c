@@ -127,6 +127,7 @@ static inline void cpu_pop(uint16_t *x) { *x = *(cpu_stack - REG_SP); REG_SP -= 
 // interrupt functions
 INT(err) { error("invalid interrupt 0x%02x with ah: 0x%02x\n", cpu_int_vec, REG_AH); }
 INT(20h) { cpu_quit = true; }
+INT(21h_000) { cpu_quit = true; }
 INT(21h_001) { REG_AL = (char)getc(stdin); }
 INT(21h_002) { REG_AL = (char)getc(stdout); putc((char)REG_DL, stdout); }
 INT(21h_005) { putc((char)REG_DL, stdout); }
@@ -164,6 +165,7 @@ void cpu_init(void)
 		for (int i = 0; i < NUM_INTERRUPTS; i++)
 		{
 			if (v == 0) cpu_interrupts[v][i] = &int_20h;
+			else if (v == 1 && i == 0) cpu_interrupts[v][i] = &int_21h_000;
 			else if (v == 1 && i == 9) cpu_interrupts[v][i] = &int_21h_009;
 			else if (v == 1 && i == 76) cpu_interrupts[v][i] = &int_21h_076;
 			else cpu_interrupts[v][i] = &int_err;
