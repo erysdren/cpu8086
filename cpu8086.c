@@ -121,9 +121,26 @@ char cpu_program_name[256];
 cpu_interupt_t cpu_interrupts[NUM_VECTORS][NUM_INTERRUPTS];
 cpu_opcode_t cpu_opcodes[NUM_OPS];
 
-// push, pop helpers
+// push, pop, mov helpers
 static inline void cpu_push(uint16_t x) { REG_SP += 2; *(cpu_stack - REG_SP) = x; }
-static inline void cpu_pop(uint16_t *x) { *x = *(cpu_stack - REG_SP); REG_SP -= 2; }
+static inline uint16_t cpu_pop(void) { uint16_t ret = *(cpu_stack - REG_SP); REG_SP -= 2; return ret; }
+static inline void cpu_mov1(uint8_t op)
+{
+	switch (op)
+	{
+		case 0xE5: REG_BP = REG_SP; break;
+		case 0xEC: REG_SP = REG_BP; break;
+		default: break;
+	}
+}
+static inline void cpu_mov2(uint8_t op1, uint8_t op2)
+{
+	switch (op1)
+	{
+		case 0x56: REG_DX = op2; break;
+		default: break;
+	}
+}
 
 // interrupt functions
 INT(err) { error("invalid interrupt 0x%02x with ah: 0x%02x\n", cpu_int_vec, REG_AH); }
@@ -139,14 +156,24 @@ INT(21h_009) { print((char *)&cpu_memory[REG_DX], '$', stdout); }
 INT(21h_076) { message("%s exited with return code %u", cpu_program_name, REG_AL); cpu_quit = true; }
 
 // opcode functions
-OP(err) /* err    */ { error("invalid opcode 0x%02x, 0x%02x at offset 0x%02x", *(p - 1), *p, (p - 1) - cpu_program); return p; }
-OP(090) /* nop    */ { return p; }
-OP(180) /* mov ah */ { REG_AH = *p; return p + 1; }
-OP(186) /* mov dx */ { REG_DX = *(uint16_t *)p; return p + 2; }
-OP(195) /* ret    */ { UNUSED(p); uint16_t ip; cpu_pop(&ip); return cpu_program + ip; }
-OP(205) /* int    */ { cpu_int_vec = *p - VECTOR_BASE; cpu_interrupts[cpu_int_vec][REG_AH](); return p + 1; }
-OP(232) /* call   */ { cpu_push((p + 2) - cpu_program); return p + *(int8_t *)p + 2; }
-OP(235) /* jmp    */ { return p + *(int8_t *)p + 1; }
+OP(err) /* err     */ { error("invalid opcode 0x%02x, 0x%02x at offset 0x%02x", *(p - 1), *p, (p - 1) - cpu_program); return p; }
+OP(080) /* push ax */ { cpu_push(REG_AX); printf("sent ax %u\n", REG_AX); return p; }
+OP(083) /* push bx */ { cpu_push(REG_BX); printf("sent bx %u\n", REG_BX); return p; }
+OP(085) /* push bp */ { cpu_push(REG_BP); printf("sent bp %u\n", REG_BP); return p; }
+OP(088) /* pop ax  */ { REG_AX = cpu_pop(); printf("ax recieved %u\n", REG_AX); return p; }
+OP(090) /* pop dx  */ { REG_DX = cpu_pop(); printf("dx recieved %u\n", REG_DX); return p; }
+OP(091) /* pop bx  */ { REG_BX = cpu_pop(); printf("bx recieved %u\n", REG_BX); return p; }
+OP(093) /* pop bp  */ { REG_BP = cpu_pop(); printf("bp recieved %u\n", REG_BP); return p; }
+OP(104) /* push    */ { cpu_push(*(uint16_t *)p); printf("sent %u\n", *(uint16_t *)p); return p + 2; }
+OP(137) /* mov     */ { cpu_mov1(*p); return p + 1; }
+OP(139) /* mov     */ { cpu_mov2(*p, *(p + 1)); return p + 2; }
+OP(144) /* nop     */ { return p; }
+OP(180) /* mov ah  */ { REG_AH = *p; return p + 1; }
+OP(186) /* mov dx  */ { REG_DX = *(uint16_t *)p; return p + 2; }
+OP(195) /* ret     */ { UNUSED(p); uint16_t ip = cpu_pop(); return cpu_program + ip; }
+OP(205) /* int     */ { cpu_int_vec = *p - VECTOR_BASE; cpu_interrupts[cpu_int_vec][REG_AH](); return p + 1; }
+OP(232) /* call    */ { cpu_push((p + 2) - cpu_program); return p + *(int8_t *)p + 2; }
+OP(235) /* jmp     */ { return p + *(int8_t *)p + 1; }
 
 //
 //
@@ -176,7 +203,17 @@ void cpu_init(void)
 	// init opcode table
 	for (int i = 0; i < NUM_OPS; i++)
 	{
-		if (i == 90) cpu_opcodes[i] = &op_090;
+		if (i == 80) cpu_opcodes[i] = &op_080;
+		else if (i == 83) cpu_opcodes[i] = &op_083;
+		else if (i == 85) cpu_opcodes[i] = &op_085;
+		else if (i == 88) cpu_opcodes[i] = &op_088;
+		else if (i == 90) cpu_opcodes[i] = &op_090;
+		else if (i == 91) cpu_opcodes[i] = &op_091;
+		else if (i == 93) cpu_opcodes[i] = &op_093;
+		else if (i == 104) cpu_opcodes[i] = &op_104;
+		else if (i == 137) cpu_opcodes[i] = &op_137;
+		else if (i == 139) cpu_opcodes[i] = &op_139;
+		else if (i == 144) cpu_opcodes[i] = &op_144;
 		else if (i == 180) cpu_opcodes[i] = &op_180;
 		else if (i == 186) cpu_opcodes[i] = &op_186;
 		else if (i == 195) cpu_opcodes[i] = &op_195;
