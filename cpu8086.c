@@ -121,8 +121,8 @@ cpu_interupt_t cpu_interrupts[NUM_VECTORS][NUM_INTERRUPTS];
 cpu_opcode_t cpu_opcodes[NUM_OPS];
 
 // push, pop helpers
-static inline void cpu_push(uint16_t x) { REG_SP -= 2; *(cpu_stack + REG_SP) = x; }
-static inline void cpu_pop(uint16_t *x) { *x = *(cpu_stack + REG_SP); REG_SP += 2; }
+static inline void cpu_push(uint16_t x) { REG_SP += 2; *(cpu_stack - REG_SP) = x; }
+static inline void cpu_pop(uint16_t *x) { *x = *(cpu_stack - REG_SP); REG_SP -= 2; }
 
 // interrupt functions
 INT(err) { error("invalid interrupt 0x%02x with ah: 0x%02x\n", cpu_int_vec, REG_AH); }
